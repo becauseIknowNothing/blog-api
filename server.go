@@ -4,6 +4,7 @@ package main
 import (
 	//"fmt"
 	"encoding/json"
+	"strconv"
 	"log"
 	"net/http"
 	"github.com/gorilla/mux"
@@ -41,10 +42,28 @@ func CreateBlogEndPoint(w http.ResponseWriter, req *http.Request){
 	//fmt.Printf("%s", req.Body)
 	var blog Blog
 	_ = json.NewDecoder(req.Body).Decode(&blog)
+	blog.BlogID = strconv.Itoa(len(blogs)+1)
+	blogs = append(blogs,blog) 
 	json.NewEncoder(w).Encode(blog)
 
 }
 
+func UpdateBlogEndPoint(w http.ResponseWriter, req *http.Request){
+	vars := mux.Vars(req)
+	var newblog Blog
+	_ = json.NewDecoder(req.Body).Decode(&newblog)
+	for idx, blog := range blogs{
+		if(blog.BlogID==vars["id"]){
+			blog.Title = newblog.Title
+			blog.Body = newblog.Body
+			var blogscopy [] Blog
+			blogscopy = append(blogs[:idx], blog)
+			blogs = append(blogscopy,blogs[idx+1:]...)
+			return
+		}
+	}
+	json.NewEncoder(w).Encode(blogs)
+}
 func DeleteBlogEndPoint(w http.ResponseWriter, req *http.Request){
 	vars := mux.Vars(req)
 	for i, blog := range blogs {
@@ -64,6 +83,7 @@ func main(){
 	r.HandleFunc("/blogs/{id}", GetBlogEndPoint).Methods("GET")
 	r.HandleFunc("/blogs/create", CreateBlogEndPoint).Methods("POST")
 	r.HandleFunc("/blogs/{id}", DeleteBlogEndPoint).Methods("DELETE")
+	r.HandleFunc("/blogs/update/{id}", UpdateBlogEndPoint).Methods("POST")
 	http.Handle("/", r)
 	if err := http.ListenAndServe(":8080", nil) ;err!=nil {
 		log.Fatal(err)
