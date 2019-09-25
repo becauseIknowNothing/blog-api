@@ -1,103 +1,109 @@
-
 package main
 
 import (
-	//"fmt"
+	"context"
 	"encoding/json"
-	"strconv"
+	"fmt"
 	"log"
 	"net/http"
+	"time"
+
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type User struct {
-	username string `json:"id, omitempty"`
-	email string `json:"id, omitempty"`
-	password string `json:"id, omitempty"`
-	blogs []Blog `json:"blogs, omitempty"`
-}
-
-type Blog struct {
-	BlogID string	`json:"id, omitempty"`
-	Title string	`json:"title, omitempty"`
-	Body string	`json:"body, omitempty"`
-}
 var client *mongo.Client
 
-var blogs []Blog
-
-/*func Handler(w http.ResponseWriter, r *http.Request){
-	fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
-}*/
-func GetBlogsEndPoint(w http.ResponseWriter, req *http.Request){
-	json.NewEncoder(w).Encode(blogs)
+type Blog struct {
+	ID    primitive.ObjectID `json:"_id, omitempty" bson:"_id, omitempty"`
+	Title string             `json:"title, omitempty" bson:"title, omitempty"`
+	Body  string             `json:"body, omitempty" bson:"body, omitempty"`
 }
 
-func GetBlogEndPoint(w http.ResponseWriter, req *http.Request){
-	vars := mux.Vars(req)
-	for _, blog := range blogs {
-		if blog.BlogID == vars["id"]{
-			json.NewEncoder(w).Encode(blog)
-			return
-		}
-		//json.NewEncoder(w).Encode(x)
+func GetBlogsListEndPoint(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("content-type", "application/json")
+	fmt.Println("a")
+	var blogs []Blog
+	fmt.Println("a")
+	collection := client.Database("BCH").Collection("blogs")
+	fmt.Println("a")
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	fmt.Println("a")
+	cursor, err := collection.Find(ctx, bson.M{})
+	fmt.Println("a")
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
 	}
-	json.NewEncoder(w).Encode(Blog{BlogID : "null", Title : "null", Body : "null"})
-	//fmt.Printf("%v", blogs)
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var blog Blog
+		cursor.Decode(&blog)
+		blogs = append(blogs, blog)
+	}
+	if err := cursor.Err(); err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	json.NewEncoder(res).Encode(blogs)
 }
 
-func CreateBlogEndPoint(w http.ResponseWriter, req *http.Request){
-	//fmt.Printf("%s", req.Body)
+func CreateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("content-type", "application/json")
 	var blog Blog
 	_ = json.NewDecoder(req.Body).Decode(&blog)
-	blog.BlogID = strconv.Itoa(len(blogs)+1)
-	blogs = append(blogs,blog) 
-	json.NewEncoder(w).Encode(blog)
-
+	collection := client.Database("BCH").Collection("blogs")
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	result, _ := collection.InsertOne(ctx, blog)
+	json.NewEncoder(res).Encode(result)
 }
 
-func UpdateBlogEndPoint(w http.ResponseWriter, req *http.Request){
+func ReadBlogEndPoint(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("content-type", "application/json")
 	vars := mux.Vars(req)
-	var newblog Blog
-	_ = json.NewDecoder(req.Body).Decode(&newblog)
-	//fmt.Printf("%s %s %s", newblog.BlogID, newblog.Title, newblog.Body)
-	for idx, blog := range blogs{
-		if(blog.BlogID==vars["id"]){
-			blog.Title = newblog.Title
-			blog.Body = newblog.Body
-			var blogscopy []Blog
-			blogscopy = append(blogs[:idx], blog)
-			blogs = append(blogscopy,blogs[idx+1:]...)
-			return
-		}
+	id, _ := primitive.ObjectIDFromHex(vars["id"])
+	collection := client.Database("BCH").Collection("blogs")
+	var blog Blog
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := collection.FindOne(ctx, Blog{ID: id}).Decode(&blog); err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
 	}
-	json.NewEncoder(w).Encode(blogs)
-}
-func DeleteBlogEndPoint(w http.ResponseWriter, req *http.Request){
-	vars := mux.Vars(req)
-	for i, blog := range blogs {
-		if blog.BlogID==vars["id"]{
-			blogs = append(blogs[:i], blogs[i+1:]...)
-			break
-		}
-	}
-	json.NewEncoder(w).Encode(blogs)
 }
 
-func main(){
-	blogs = append(blogs, Blog{BlogID : "1", Title : "Backend", Body : "Working with go"})
-	blogs = append(blogs, Blog{BlogID : "2", Title : " Frontend", Body : "FrontEnd is ewwww"})
-	r := mux.NewRouter()
-	r.HandleFunc("/blogs", GetBlogsEndPoint).Methods("GET")
-	r.HandleFunc("/blogs/{id}", GetBlogEndPoint).Methods("GET")
-	r.HandleFunc("/blogs/create", CreateBlogEndPoint).Methods("POST")
-	r.HandleFunc("/blogs/{id}", DeleteBlogEndPoint).Methods("DELETE")
-	r.HandleFunc("/blogs/update/{id}", UpdateBlogEndPoint).Methods("POST")
-	http.Handle("/", r)
-	if err := http.ListenAndServe(":8080", nil) ;err!=nil {
+// func CloseDB() {
+// 	err := client.Disconnect(context.TODO())
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	fmt.Println("Connection to MongoDB closed.")
+// }
+
+func TestingEndPoint(res http.ResponseWriter, req *http.Request) {
+	json.NewEncoder(res).Encode(Blog{})
+}
+func main() {
+	fmt.Println("API Started")
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	client, err := mongo.Connect(context.Background(), clientOptions)
+	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println("Connected to MongoDB")
+	err = client.Ping(context.TODO(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	router := mux.NewRouter()
+	router.HandleFunc("/", TestingEndPoint).Methods("GET")
+	router.HandleFunc("/blogs", GetBlogsListEndPoint).Methods("GET")
+	router.HandleFunc("/createblog", CreateBlogEndPoint).Methods("POST")
+	router.HandleFunc("/readblog/{id}", ReadBlogEndPoint).Methods("GET")
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
