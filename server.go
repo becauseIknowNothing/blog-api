@@ -8,13 +8,24 @@ import (
 	"log"
 	"net/http"
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
+
+type User struct {
+	username string `json:"id, omitempty"`
+	email string `json:"id, omitempty"`
+	password string `json:"id, omitempty"`
+	blogs []Blog `json:"blogs, omitempty"`
+}
 
 type Blog struct {
 	BlogID string	`json:"id, omitempty"`
 	Title string	`json:"title, omitempty"`
 	Body string	`json:"body, omitempty"`
 }
+var client *mongo.Client
 
 var blogs []Blog
 
@@ -52,11 +63,12 @@ func UpdateBlogEndPoint(w http.ResponseWriter, req *http.Request){
 	vars := mux.Vars(req)
 	var newblog Blog
 	_ = json.NewDecoder(req.Body).Decode(&newblog)
+	//fmt.Printf("%s %s %s", newblog.BlogID, newblog.Title, newblog.Body)
 	for idx, blog := range blogs{
 		if(blog.BlogID==vars["id"]){
 			blog.Title = newblog.Title
 			blog.Body = newblog.Body
-			var blogscopy [] Blog
+			var blogscopy []Blog
 			blogscopy = append(blogs[:idx], blog)
 			blogs = append(blogscopy,blogs[idx+1:]...)
 			return
