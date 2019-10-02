@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -69,35 +70,43 @@ func ReadBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("content-type", "application/json")
 	vars := mux.Vars(req)
 	title, _ := vars["title"]
-	filter := bson.D{{"title", title}}
-	fmt.Printf("%T", filter)
-	// var blog Blog
-	// ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	// if err := collection.Find(ctx, Blog{Title: title}).Decode(&blog); err != nil {
-	// 	res.WriteHeader(http.StatusInternalServerError)
-	// 	res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
-	// 	return
-	// }
-	//json.NewEncoder(res).Encode(blog)
-}
-func UpdateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
-	res.Header().Set("content-type", "application/json")
-	vars := mux.Vars(req)
-	title, _ := vars["title"]
-	fmt.Printf("%v", title)
-	var blog Blog
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := collection.FindOne(ctx, Blog{title: id}).Decode(&blog); err != nil {
+	findoptions := options.Find()
+	cur, err := collection.Find(context.TODO(), bson.D{{}}, findoptions)
+	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
 		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
 		return
 	}
+	var blogs []Blog
+	for cur.Next(context.TODO()) {
+		var blog Blog
+		err := cur.Decode(&blog)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if strings.Contains(strings.ToLower(blog.Title), title) {
+			blogs = append(blogs, blog)
+		}
+	}
+	json.NewEncoder(res).Encode(blogs)
 }
+
+// func UpdateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
+// 	res.Header().Set("content-type", "application/json")
+// 	vars := mux.Vars(req)
+// 	title, _ := vars["title"]
+// 	var blog Blog
+// 	filter := bson.D{{"tilte", title}}
+// 	if err := collection.FindOne(context.TODO(), Blog{Title: title}).Decode(&blog); err != nil {
+// 		res.WriteHeader(http.StatusInternalServerError)
+// 		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+// 		return
+// 	}
+// }
 
 func DeleteBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	title, _ := vars["title"]
-	fmt.Println(title)
 	_, err := collection.DeleteOne(context.TODO(), bson.M{"title": title})
 	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
@@ -137,7 +146,7 @@ func main() {
 	router.HandleFunc("/blogs", GetBlogsListEndPoint).Methods("GET")
 	router.HandleFunc("/createblog", CreateBlogEndPoint).Methods("POST")
 	router.HandleFunc("/readblog/{title}", ReadBlogEndPoint).Methods("GET")
-	router.HandleFunc("/updateblog/{title}", UpdateBlogEndPoint).Methods("POST")
+	//router.HandleFunc("/updateblog/{title}", UpdateBlogEndPoint).Methods("POST")
 	router.HandleFunc("/deleteblog/{title}", DeleteBlogEndPoint).Methods("DELETE")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
