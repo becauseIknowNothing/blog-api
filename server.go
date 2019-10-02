@@ -83,7 +83,7 @@ func ReadBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if strings.Contains(strings.ToLower(blog.Title), title) {
+		if strings.Contains(strings.ToLower(blog.Title), strings.ToLower(title)) {
 			blogs = append(blogs, blog)
 		}
 	}
