@@ -91,18 +91,23 @@ func ReadBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(res).Encode(blogs)
 }
 
-// func UpdateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
-// 	res.Header().Set("content-type", "application/json")
-// 	vars := mux.Vars(req)
-// 	title, _ := vars["title"]
-// 	var blog Blog
-// 	filter := bson.D{{"tilte", title}}
-// 	if err := collection.FindOne(context.TODO(), Blog{Title: title}).Decode(&blog); err != nil {
-// 		res.WriteHeader(http.StatusInternalServerError)
-// 		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
-// 		return
-// 	}
-// }
+func UpdateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("content-type", "application/json")
+	vars := mux.Vars(req)
+	title, _ := vars["title"]
+	var blog Blog
+	_ = json.NewDecoder(req.Body).Decode(&blog)
+	filter := bson.D{{"title", title}}
+	update := bson.M{"$set": bson.M{"title": blog.Title, "body": blog.Body, "lastmodified": time.Now().String()}}
+	//update := bson.M{"$set": bson.M{"title": req.Body.title, "body": req.Body.body, "lastmodified": req.Body.lastmodified}}
+	_, err := collection.UpdateOne(context.TODO(), filter, update)
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	// fmt.Println(blog)
+}
 
 func DeleteBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
@@ -146,7 +151,7 @@ func main() {
 	router.HandleFunc("/blogs", GetBlogsListEndPoint).Methods("GET")
 	router.HandleFunc("/createblog", CreateBlogEndPoint).Methods("POST")
 	router.HandleFunc("/readblog/{title}", ReadBlogEndPoint).Methods("GET")
-	//router.HandleFunc("/updateblog/{title}", UpdateBlogEndPoint).Methods("POST")
+	router.HandleFunc("/updateblog/{title}", UpdateBlogEndPoint).Methods("POST")
 	router.HandleFunc("/deleteblog/{title}", DeleteBlogEndPoint).Methods("DELETE")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
