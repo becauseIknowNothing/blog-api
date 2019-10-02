@@ -63,7 +63,6 @@ func CreateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 	blog.LastModified = time.Now().String()
 	result, _ := collection.InsertOne(ctx, blog)
 	fmt.Println(result)
-	//json.NewEncoder(res).Encode(result)
 }
 
 func ReadBlogEndPoint(res http.ResponseWriter, req *http.Request) {
@@ -99,14 +98,12 @@ func UpdateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 	_ = json.NewDecoder(req.Body).Decode(&blog)
 	filter := bson.D{{"title", title}}
 	update := bson.M{"$set": bson.M{"title": blog.Title, "body": blog.Body, "lastmodified": time.Now().String()}}
-	//update := bson.M{"$set": bson.M{"title": req.Body.title, "body": req.Body.body, "lastmodified": req.Body.lastmodified}}
 	_, err := collection.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
 		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
 		return
 	}
-	// fmt.Println(blog)
 }
 
 func DeleteBlogEndPoint(res http.ResponseWriter, req *http.Request) {
@@ -118,7 +115,6 @@ func DeleteBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
 		return
 	}
-	//deleteResult, err := collection.DeleteOne(context.TODO(), bson.D{"title": tle})
 }
 
 func CloseDB() {
