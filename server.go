@@ -10,30 +10,31 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var client *mongo.Client
+var collection *mongo.Collection
+
+type Author struct {
+	AuthorName string `json:"authorname" bson:"authorname"`
+	AuthorImg  string `json:"authorimg" bson:"authorimg"`
+}
 
 type Blog struct {
-	ID    primitive.ObjectID `json:"_id, omitempty" bson:"_id, omitempty"`
-	Title string             `json:"title, omitempty" bson:"title, omitempty"`
-	Body  string             `json:"body, omitempty" bson:"body, omitempty"`
+	Title        string `json:"title" bson:"title"`
+	AuthorInfo   Author `json:"author" bson:"author"`
+	Body         string `json:"body" bson:"body`
+	LastModified string `json:"lastmodified" bson:"lastmodified"`
+	// ModifiedAtDate time.Date
 }
 
 func GetBlogsListEndPoint(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("content-type", "application/json")
-	fmt.Println("a")
 	var blogs []Blog
-	fmt.Println("a")
-	collection := client.Database("BCH").Collection("blogs")
-	fmt.Println("a")
-	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-	fmt.Println("a")
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	cursor, err := collection.Find(ctx, bson.M{})
-	fmt.Println("a")
 	if err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
 		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
@@ -57,33 +58,62 @@ func CreateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("content-type", "application/json")
 	var blog Blog
 	_ = json.NewDecoder(req.Body).Decode(&blog)
-	collection := client.Database("BCH").Collection("blogs")
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	blog.LastModified = time.Now().String()
 	result, _ := collection.InsertOne(ctx, blog)
-	json.NewEncoder(res).Encode(result)
+	fmt.Println(result)
+	//json.NewEncoder(res).Encode(result)
 }
 
 func ReadBlogEndPoint(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("content-type", "application/json")
 	vars := mux.Vars(req)
-	id, _ := primitive.ObjectIDFromHex(vars["id"])
-	collection := client.Database("BCH").Collection("blogs")
+	title, _ := vars["title"]
+	filter := bson.D{{"title", title}}
+	fmt.Printf("%T", filter)
+	// var blog Blog
+	// ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	// if err := collection.Find(ctx, Blog{Title: title}).Decode(&blog); err != nil {
+	// 	res.WriteHeader(http.StatusInternalServerError)
+	// 	res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+	// 	return
+	// }
+	//json.NewEncoder(res).Encode(blog)
+}
+func UpdateBlogEndPoint(res http.ResponseWriter, req *http.Request) {
+	res.Header().Set("content-type", "application/json")
+	vars := mux.Vars(req)
+	title, _ := vars["title"]
+	fmt.Printf("%v", title)
 	var blog Blog
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := collection.FindOne(ctx, Blog{ID: id}).Decode(&blog); err != nil {
+	if err := collection.FindOne(ctx, Blog{title: id}).Decode(&blog); err != nil {
 		res.WriteHeader(http.StatusInternalServerError)
 		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
 		return
 	}
 }
 
-// func CloseDB() {
-// 	err := client.Disconnect(context.TODO())
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	fmt.Println("Connection to MongoDB closed.")
-// }
+func DeleteBlogEndPoint(res http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	title, _ := vars["title"]
+	fmt.Println(title)
+	_, err := collection.DeleteOne(context.TODO(), bson.M{"title": title})
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		res.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	//deleteResult, err := collection.DeleteOne(context.TODO(), bson.D{"title": tle})
+}
+
+func CloseDB() {
+	err := client.Disconnect(context.TODO())
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Connection to MongoDB closed.")
+}
 
 func TestingEndPoint(res http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(res).Encode(Blog{})
@@ -91,19 +121,23 @@ func TestingEndPoint(res http.ResponseWriter, req *http.Request) {
 func main() {
 	fmt.Println("API Started")
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-	client, err := mongo.Connect(context.Background(), clientOptions)
+	client, err := mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Connected to MongoDB")
+	defer CloseDB()
 	err = client.Ping(context.TODO(), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+	collection = client.Database("BCH").Collection("blogs")
 	router := mux.NewRouter()
 	router.HandleFunc("/", TestingEndPoint).Methods("GET")
 	router.HandleFunc("/blogs", GetBlogsListEndPoint).Methods("GET")
 	router.HandleFunc("/createblog", CreateBlogEndPoint).Methods("POST")
-	router.HandleFunc("/readblog/{id}", ReadBlogEndPoint).Methods("GET")
+	router.HandleFunc("/readblog/{title}", ReadBlogEndPoint).Methods("GET")
+	router.HandleFunc("/updateblog/{title}", UpdateBlogEndPoint).Methods("POST")
+	router.HandleFunc("/deleteblog/{title}", DeleteBlogEndPoint).Methods("DELETE")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
